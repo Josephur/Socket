@@ -1,0 +1,39 @@
+name: Lint Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.ino'
+      - '**.cpp'
+      - '**.h'
+      - '**.hpp'
+      - '.clang-format'
+      - '.clang-tidy'
+      - '.github/workflows/lint.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-tidy and clang-format
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-tidy clang-format
+
+      - name: Check clang-format
+        run: |
+          find . -name '*.ino' -o -name '*.cpp' -o -name '*.h' -o -name '*.hpp' \
+            | xargs clang-format --dry-run -Werror 2>&1 || echo "Format check found issues"
+          echo "---"
+          echo "clang-format check complete — non-blocking for initial setup"
+
+      - name: Check clang-tidy
+        run: |
+          find . -name '*.ino' -o -name '*.cpp' -o -name '*.h' | head -20 \
+            | xargs clang-tidy --quiet 2>&1 || true

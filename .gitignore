@@ -1,0 +1,14 @@
+.pio/
+.vscode/
+build/
+*.o
+*.o.d
+*.a
+*.s
+*.elf
+*.map
+*.bin
+*.hex
+*.log
+.DS_Store
+Thumbs.db
