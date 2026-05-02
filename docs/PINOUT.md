@@ -1,4 +1,4 @@
-# P4-86Panel — Verified Pin Mapping
+# Socket — Verified Pin Mapping (ESP32-P4-WIFI6-Touch-LCD-4B)
 
 > Source: pevin32/ESP32 (Xiaozhi voice assistant) board definition + Waveshare BSP
 

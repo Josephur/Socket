@@ -1,5 +1,5 @@
 /**
- * P4-86Panel — 01_HelloWorld
+ * Socket — 01_HelloWorld
  *
  * First test sketch for the Waveshare ESP32-P4-WIFI6-Touch-LCD-4B.
  * Initializes the display and prints "Hello World!" to the screen.
@@ -26,7 +26,7 @@ static Arduino_ST7703 *gfx = nullptr;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("P4-86Panel HelloWorld starting...");
+  Serial.println("Socket HelloWorld starting...");
 
   /* Initialize backlight (GPIO 26, inverted) */
   pinMode(PIN_LCD_BL, OUTPUT);

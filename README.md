@@ -1,4 +1,4 @@
-# P4-86Panel 🦀
+# Socket 🦀
 
 Arduino firmware for the **Waveshare ESP32-P4-WIFI6-Touch-LCD-4B** — a 4" round 720×720 IPS Smart 86 Box with ESP32-P4 RISC-V processor and ESP32-C6 WiFi 6 coprocessor.
 
@@ -37,7 +37,7 @@ See [Getting Started](https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-4B
 ## Project Structure
 
 ```
-├── .github/workflows/    CI pipeline (compile + lint checks)
+├── ci/                   CI pipeline examples (compile + lint)
 ├── examples/             Arduino example sketches
 │   └── 01_HelloWorld/    First test — "Hello World" on display
 ├── lib/                  Custom libraries (as needed)
@@ -52,3 +52,5 @@ See [Getting Started](https://www.waveshare.com/wiki/ESP32-P4-WIFI6-Touch-LCD-4B
 ## First Test
 
 Open `examples/01_HelloWorld/HelloWorld.ino` in Arduino IDE 2.3.8, select `ESP32P4 Dev Module`, and upload.
+
+> **Note:** CI workflows are in `ci/`. To enable them, copy into `.github/workflows/` — requires a GitHub token with `workflow` scope.
