@@ -12,3 +12,8 @@ build/
 *.log
 .DS_Store
 Thumbs.db
+.env
+.env.local
+*.pem
+id_rsa
+secrets.json
