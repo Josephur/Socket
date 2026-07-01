@@ -19,8 +19,14 @@
 // the normal app: runs an automated tone-detection self-test, then a live
 // mic->speaker loopback forever (talk into the mic, listen on the speaker).
 // Skips WiFi/display/LVGL entirely so this is a pure audio-path test with
-// no other subsystems in the way. Set back to 0 to return to normal.
-#define SOCKET_AUDIO_TEST_MODE 1
+// no other subsystems in the way -- useful for isolating audio issues, but
+// it means no video signal at all (screen goes black, though the backlight
+// GPIO floats "on" by default since nothing drives it either way).
+//
+// Normal mode (0) now also runs the tone self-test once during boot (see
+// setup() below) so you get audio diagnostics AND the full screen/touch/
+// timeout behavior in the same build.
+#define SOCKET_AUDIO_TEST_MODE 0
 
 #include "src/audio/AudioCodec.h"
 #include "src/audio/AudioPlayer.h"
@@ -235,6 +241,14 @@ void setup() {
   Logger::info(kTag, "step: audioCodec.begin()");
   if (!g_audioCodec.begin()) {
     Logger::warn(kTag, "AudioCodec not fully initialized (see AudioCodec.h)");
+  } else {
+    Logger::info(kTag, "running audio self-test (tone + record)...");
+    AudioSelfTest::ToneTestResult audioResult =
+        AudioSelfTest::runToneDetectionTest(g_audioCodec);
+    Logger::info(kTag, audioResult.toneDetected
+                            ? "audio SELF-TEST PASSED"
+                            : "audio SELF-TEST INCONCLUSIVE -- see "
+                              "AudioSelfTest logs above");
   }
 
   Logger::info(
