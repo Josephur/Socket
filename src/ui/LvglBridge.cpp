@@ -3,6 +3,7 @@
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 
+#include "../core/ActivityMonitor.h"
 #include "../core/Logger.h"
 
 namespace {
@@ -82,6 +83,7 @@ void LvglBridge::touchReadCallback(lv_indev_t *indev, lv_indev_data_t *data) {
     data->point.x = x;
     data->point.y = y;
     data->state = LV_INDEV_STATE_PRESSED;
+    ActivityMonitor::notify();
   } else {
     data->state = LV_INDEV_STATE_RELEASED;
   }

@@ -22,6 +22,7 @@
 #include "src/config/DeviceIdentity.h"
 #include "src/config/ProvisioningClient.h"
 #include "src/config/RuntimeConfig.h"
+#include "src/core/ActivityMonitor.h"
 #include "src/core/AppState.h"
 #include "src/core/Logger.h"
 #include "src/core/RetryBackoff.h"
@@ -36,6 +37,15 @@
 
 namespace {
 constexpr const char *kTag = "Socket";
+
+// BOOT button, GPIO35 per docs/PINOUT.md -- active low. Doubles as a wake
+// button for the screen-timeout feature below.
+constexpr int kBootButtonPin = 35;
+
+// Screen blanks (backlight off) after this long with no activity. "Activity"
+// is centrally defined by ActivityMonitor -- see its header for the current
+// list of sources (state transitions, touch, this button).
+constexpr uint32_t kScreenTimeoutMs = 5UL * 60UL * 1000UL;
 
 AppStateMachine g_appState;
 RuntimeConfig g_config;
@@ -119,6 +129,35 @@ void runConversationTurn() {
   IdleScreen::show();
 }
 
+// Blanks the backlight after kScreenTimeoutMs of no ActivityMonitor
+// activity, and restores it the moment activity resumes. Rendering itself
+// keeps running underneath -- this only cuts the backlight, per the current
+// requirement ("go blank and 0 backlight until activity resumes").
+void updateScreenPower() {
+  static bool screenOn = true;
+  bool shouldBeOn = ActivityMonitor::msSinceLastActivity() < kScreenTimeoutMs;
+
+  if (shouldBeOn != screenOn) {
+    screenOn = shouldBeOn;
+    g_display.setBacklight(screenOn);
+    Logger::info(kTag, screenOn ? "screen woke (activity detected)"
+                                 : "screen timed out after 5 min idle");
+  }
+}
+
+// Polls the BOOT button as a physical wake source. Debounced with a simple
+// edge check so holding it doesn't spam ActivityMonitor -- harmless either
+// way, but keeps the log quiet.
+void pollBootButton() {
+  static bool wasPressed = false;
+  bool pressed = digitalRead(kBootButtonPin) == LOW;
+  if (pressed && !wasPressed) {
+    Logger::info(kTag, "BOOT button pressed");
+    ActivityMonitor::notify();
+  }
+  wasPressed = pressed;
+}
+
 }  // namespace
 
 void setup() {
@@ -170,11 +209,16 @@ void setup() {
     OfflineScreen::show();
   }
 
+  pinMode(kBootButtonPin, INPUT_PULLUP);
+  ActivityMonitor::notify();  // start the screen-timeout countdown fresh
+
   Logger::info(kTag, "=== setup() complete ===");
 }
 
 void loop() {
   g_lvgl.tick();
+  pollBootButton();
+  updateScreenPower();
 
   // Throttled heartbeat so a hung/silent board is distinguishable from one
   // that's simply idle -- see the current AppState if this stops printing.

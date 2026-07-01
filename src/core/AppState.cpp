@@ -1,5 +1,7 @@
 #include "AppState.h"
 
+#include "ActivityMonitor.h"
+
 const char *toString(AppState state) {
   switch (state) {
     case AppState::kBoot:
@@ -26,6 +28,7 @@ bool AppStateMachine::transitionTo(AppState next) {
   // fetches config once and the device may have missed updates while down.
   if (next == AppState::kOffline) {
     state_ = next;
+    ActivityMonitor::notify();
     return true;
   }
 
@@ -56,6 +59,7 @@ bool AppStateMachine::transitionTo(AppState next) {
 
   if (valid) {
     state_ = next;
+    ActivityMonitor::notify();
   }
   return valid;
 }
