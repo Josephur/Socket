@@ -157,3 +157,56 @@ AI-related emoji/icons from FiraCode Nerd Font Mono to the LVGL UI
 (avatar/status icons, idle screen) instead of plain text where appropriate;
 consider a dedicated physical wake button instead of reusing BOOT (GPIO35)
 long-term.
+
+## Speaker/mic bring-up + test harness
+
+Implemented real ES8311 (speaker/DAC) and ES7210 (mic/ADC) I2C register
+init in `src/audio/codecs/` -- best-effort reconstructions from the widely
+published ES8311 pattern (see each file's CONFIDENCE NOTE), not vendored or
+datasheet-verified in this session. Wired into `AudioCodec::codecInit()`.
+
+Built a dedicated test harness (`src/audio/AudioSelfTest.*`) with two
+modes, toggled via `SOCKET_AUDIO_TEST_MODE` in `Socket.ino` (currently
+**on** -- set to 0 to return to the normal app):
+- An automated tone-detection self-test: plays a 1kHz tone out the speaker
+  while simultaneously recording from the mic, comparing recorded loudness
+  against a pre-tone silence baseline. No human required to get a signal.
+- A live mic->speaker loopback that runs forever, for a human to test by
+  talking into the mic and listening to the speaker.
+
+Both subsystems skip WiFi/display/LVGL entirely in test mode -- pure audio
+path, smaller/simpler binary (565KB vs 1.4MB), nothing else that could mask
+or complicate results.
+
+**Real results from flashing this to the device:**
+- **ES8311 (speaker) chip ID register 0xFD read back `0x83`** -- this
+  matches the value I expected from memory exactly, which is a genuine
+  (if partial) confirmation that the ES8311 I2C link and my register
+  reconstruction are probably in the right ballpark. Worth confirming by
+  ear tomorrow (a 1kHz tone plays once during the self-test, right after
+  boot).
+- **ES7210 (mic) chip ID register 0xFD read back `0xFF`**, and both the
+  baseline-silence and tone-playing RMS measurements came back exactly
+  `0.00` -- not just quiet, but literally all-zero samples, which usually
+  means the ADC isn't actually streaming real data over I2S (stuck in
+  power-down, wrong format/slot config, or the 0xFD register guess simply
+  isn't ES7210's chip ID at all -- unlike ES8311, I don't have strong
+  confidence in ES7210's register map, see the file's CONFIDENCE NOTE).
+  **This needs the real ES7210 datasheet to fix properly** -- not something
+  to keep guessing at from memory; further blind attempts risk wasting
+  time on wrong addresses.
+
+**For tomorrow's manual test:** device is left flashed with
+`SOCKET_AUDIO_TEST_MODE` on. Power it on and listen for a ~1 second 1kHz
+tone shortly after boot (confirms speaker output). The subsequent live
+loopback won't produce audible mic passthrough yet since the mic path
+isn't capturing real data -- that's expected given the RMS=0 result above,
+not a new failure. Serial log at 115200 baud shows the same self-test
+numbers if you want to watch it boot.
+
+**Next steps (in addition to earlier ones):** get the real ES7210
+datasheet/register map (or find its actual public component source) rather
+than continuing to guess; once mic capture produces nonzero RMS, rerun the
+tone-detection self-test for a real pass/fail; set
+`SOCKET_AUDIO_TEST_MODE` back to 0 once audio is confirmed working to
+return to the normal app.

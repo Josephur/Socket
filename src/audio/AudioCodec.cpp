@@ -4,6 +4,7 @@
 #include <driver/i2s_std.h>
 
 #include "../core/Logger.h"
+#include "../ui/board/SharedI2CBus.h"
 
 namespace {
 constexpr const char *kTag = "AudioCodec";
@@ -32,10 +33,7 @@ bool AudioCodec::begin(uint32_t sampleRateHz) {
   Logger::info(kTag, "i2sInit() succeeded, calling codecInit()");
 
   if (!codecInit(sampleRateHz)) {
-    Logger::warn(kTag,
-                 "ES8311/ES7210 register init not implemented yet -- see "
-                 "AudioCodec.h. I2S peripheral is up but audio will be "
-                 "silent/garbage until the codec component is vendored in.");
+    Logger::error(kTag, "codec I2C init failed -- see Es8311/Es7210 headers");
     return false;
   }
 
@@ -81,11 +79,23 @@ bool AudioCodec::i2sInit(uint32_t sampleRateHz) {
 }
 
 bool AudioCodec::codecInit(uint32_t sampleRateHz) {
-  // TODO: vendor the `es8311` ESP-IDF component and call its
-  // es8311_create/es8311_init/es8311_sample_frequency_config/
-  // es8311_voice_volume_set/es8311_microphone_config here, over the shared
-  // I2C bus (see src/ui/board/SharedI2CBus.h). Returning false until then.
-  return false;
+  DEV_I2C_Port &bus = SharedI2CBus();
+
+  Logger::info(kTag, "initializing ES8311 (speaker/DAC path)");
+  if (!dac_.begin(bus.bus, sampleRateHz)) {
+    return false;
+  }
+
+  Logger::info(kTag, "initializing ES7210 (mic/ADC path)");
+  if (!adc_.begin(bus.bus, sampleRateHz)) {
+    return false;
+  }
+
+  return true;
+}
+
+void AudioCodec::setVolume(uint8_t volumePercent) {
+  dac_.setVolume(volumePercent);
 }
 
 size_t AudioCodec::write(const int16_t *samples, size_t count) {

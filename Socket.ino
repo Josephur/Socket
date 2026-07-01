@@ -15,9 +15,17 @@
 
 #include <esp_heap_caps.h>
 
+// Set to 1 to boot straight into the speaker/mic bring-up test instead of
+// the normal app: runs an automated tone-detection self-test, then a live
+// mic->speaker loopback forever (talk into the mic, listen on the speaker).
+// Skips WiFi/display/LVGL entirely so this is a pure audio-path test with
+// no other subsystems in the way. Set back to 0 to return to normal.
+#define SOCKET_AUDIO_TEST_MODE 1
+
 #include "src/audio/AudioCodec.h"
 #include "src/audio/AudioPlayer.h"
 #include "src/audio/AudioRecorder.h"
+#include "src/audio/AudioSelfTest.h"
 #include "src/audio/WakeWordDetector.h"
 #include "src/config/DeviceIdentity.h"
 #include "src/config/ProvisioningClient.h"
@@ -160,6 +168,38 @@ void pollBootButton() {
 
 }  // namespace
 
+#if SOCKET_AUDIO_TEST_MODE
+void setup() {
+  Logger::begin();
+  delay(1500);
+  Logger::info(kTag, "=== Socket AUDIO TEST MODE ===");
+  Logger::info(kTag, "WiFi/display/LVGL skipped -- pure audio-path test");
+
+  if (!g_audioCodec.begin()) {
+    Logger::error(kTag,
+                   "AudioCodec.begin() failed -- see Es8311/Es7210 logs "
+                   "above for which chip didn't ACK on I2C");
+    while (true) {
+      delay(1000);
+    }
+  }
+
+  AudioSelfTest::ToneTestResult result =
+      AudioSelfTest::runToneDetectionTest(g_audioCodec);
+  Logger::info(kTag, result.toneDetected
+                          ? "SELF-TEST PASSED: mic picked up the played "
+                            "tone -- speaker and mic paths are both alive"
+                          : "SELF-TEST INCONCLUSIVE: mic did not clearly "
+                            "pick up the tone -- do the manual listening "
+                            "test next to tell physical vs. register issue");
+
+  AudioSelfTest::runLiveLoopbackForever(g_audioCodec);  // never returns
+}
+
+void loop() {}  // unreachable in audio test mode
+
+#else
+
 void setup() {
   Logger::begin();
   // Give the USB-serial bridge time to enumerate before we start printing --
@@ -258,3 +298,5 @@ void loop() {
 
   delay(5);
 }
+
+#endif  // SOCKET_AUDIO_TEST_MODE
