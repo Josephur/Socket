@@ -277,11 +277,19 @@ void setup() {
        String(heap_caps_get_free_size(MALLOC_CAP_DMA)) + " bytes")
           .c_str());
 
-  Logger::info(kTag, "step: runProvisioning()");
-  runProvisioning();
-  if (g_appState.current() == AppState::kOffline) {
-    OfflineScreen::show();
-  }
+  // Deliberately NOT calling runProvisioning() here: it blocks on WiFi
+  // connect + an HTTPS request to the provisioning server, which can take
+  // a long time (or the better part of a minute) when that server is
+  // unreachable/slow to resolve. Since loop() -- and therefore all touch/
+  // button polling -- doesn't start until setup() returns, that made the
+  // screen look fully booted (display was already up) while inputs were
+  // silently ignored for as long as this blocked. Instead, go straight to
+  // OFFLINE and let loop()'s existing RetryBackoff-gated retry (below)
+  // make the first real attempt a few seconds in, once loop() is already
+  // running and responsive.
+  Logger::info(kTag, "deferring first provisioning attempt to loop()");
+  g_appState.transitionTo(AppState::kOffline);
+  OfflineScreen::show();
 
   pinMode(kBootButtonPin, INPUT_PULLUP);
   ActivityMonitor::notify();  // start the screen-timeout countdown fresh

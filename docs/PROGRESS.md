@@ -256,3 +256,52 @@ the temporary tap-to-play test tone once satisfied; consider adding
 playback; set `SOCKET_AUDIO_TEST_MODE` back to 0 (already done) and move on
 to wiring real `AudioRecorder`/`AudioPlayer` usage into the conversation
 flow.
+
+## Volume tuning + fixed a real boot-responsiveness bug
+
+Speaker volume at 100% (from the earlier volume-boost commit) was
+uncomfortably loud once mic gain was also maxed -- dropped `Es8311`'s
+default to 70%.
+
+**Found and fixed the "taps take almost a minute to register after boot"
+bug.** Root cause: `setup()` called `runProvisioning()` synchronously,
+which blocks on WiFi connect plus an HTTPS request to the (currently
+nonexistent) provisioning server at `stack-tech.local`. Since `loop()` --
+and therefore all touch/button polling -- doesn't start until `setup()`
+returns, the screen looked fully booted (display was already up before
+this point) while every input was silently ignored for as long as that
+network call took to time out. Fixed by deferring the first provisioning
+attempt entirely to loop()'s existing `RetryBackoff`-gated retry logic:
+`setup()` now goes straight to OFFLINE and shows that screen immediately,
+and the real first attempt happens a few seconds into `loop()` running,
+by which point touch/buttons are already responsive.
+
+## Added a real Nerd Font icon set (not just LVGL's built-in symbols)
+
+Downloaded the actual FiraCode Nerd Font Mono TTF from
+`ryanoasis/nerd-fonts` (MIT), then **verified every codepoint against the
+font's real cmap table with Python's `fonttools`** before using it --
+several codepoints recalled from memory of the Nerd Font cheat sheet were
+wrong (e.g. `fa-robot` is U+EE0D in this font, not U+F544 as commonly
+cited), so this verification step mattered. Converted a 20-glyph subset
+(robot, brain, microchip, sparkle, magic wand, comment/comments,
+microphone, volume up/off, wifi, bluetooth, cloud, database, gear, bolt,
+check, close/x, warning, battery-full) to an LVGL font with `lv_font_conv`
+(`npx lv_font_conv --font ... --format lvgl --size 24 --bpp 4`), landing at
+`src/ui/fonts/lv_font_ai_icons_24.c` + `AiIcons.h` (UTF-8 string constants
+per glyph, each commented with its source codepoint and semantic name for
+future verification).
+
+Wired a test row of all 20 icons onto `OfflineScreen` (not `IdleScreen`,
+since Offline is what's actually visible without a real provisioning
+server -- move to wherever these get used for real, e.g. a status bar,
+once picked). One fix needed after first compile: `lv_font_conv`'s
+generated `#include "lvgl/lvgl.h"` fallback path doesn't match how this
+project includes LVGL (`#include <lvgl.h>` everywhere else) -- simplified
+to match.
+
+**Next steps:** decide where these icons actually belong in the UI
+(status bar icons for wifi/mic-state seem like the obvious real use,
+rather than a dumped test row); remove the test row from `OfflineScreen`
+once reviewed; consider generating a second, smaller size (e.g. 16px) for
+inline-with-text use if 24px proves too large for some spots.

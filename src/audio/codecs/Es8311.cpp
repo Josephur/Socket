@@ -100,10 +100,11 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegDac37, 0x08);     // bypass DAC equalizer
 
   setMute(false);
-  // Max digital volume -- the NS4150B amplifier and small speaker on this
-  // board have no separate analog gain stage to make up for a conservative
-  // digital volume, so anything less than max came out very quiet.
-  setVolume(100);
+  // 100% was uncomfortably loud once mic gain was also maxed out (the
+  // whole point of raising both was to fix "so quiet you can barely hear
+  // it" -- turns out that overshot). 70% is a saner default; revisit once
+  // this is driven by real TTS audio instead of a synthetic test tone.
+  setVolume(70);
 
   Logger::info(kTag, "begin() complete");
   return true;
