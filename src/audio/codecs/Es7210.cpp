@@ -39,9 +39,11 @@ constexpr uint8_t kRegMic4Power = 0x4A;
 constexpr uint8_t kRegMic12Power = 0x4B;
 constexpr uint8_t kRegMic34Power = 0x4C;
 
-// 30dB gain (ES7210_MIC_GAIN_30DB=10 in the real driver's enum) | 0x10,
-// exactly as es7210_set_mic_gain() writes it.
-constexpr uint8_t kMicGain30dbReg = 10 | 0x10;
+// 37.5dB gain, the max (ES7210_MIC_GAIN_37_5DB=14 in the real driver's
+// enum, which tops out there -- 0..14 covers 0dB to 37.5dB in 3dB steps)
+// | 0x10, exactly as es7210_set_mic_gain() writes it. Bumped from the
+// initial 30dB after the first working recording came back very quiet.
+constexpr uint8_t kMicGainMaxReg = 14 | 0x10;
 // 2.87V bias (ES7210_MIC_BIAS_2V87 in the real driver's enum).
 constexpr uint8_t kMicBias2v87 = 0x70;
 }  // namespace
@@ -85,10 +87,10 @@ bool Es7210::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegMic12Bias, kMicBias2v87);
   writeReg(kRegMic34Bias, kMicBias2v87);
 
-  writeReg(kRegMic1Gain, kMicGain30dbReg);
-  writeReg(kRegMic2Gain, kMicGain30dbReg);
-  writeReg(kRegMic3Gain, kMicGain30dbReg);
-  writeReg(kRegMic4Gain, kMicGain30dbReg);
+  writeReg(kRegMic1Gain, kMicGainMaxReg);
+  writeReg(kRegMic2Gain, kMicGainMaxReg);
+  writeReg(kRegMic3Gain, kMicGainMaxReg);
+  writeReg(kRegMic4Gain, kMicGainMaxReg);
 
   writeReg(kRegMic1Power, 0x08);
   writeReg(kRegMic2Power, 0x08);

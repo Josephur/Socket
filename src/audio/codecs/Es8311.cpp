@@ -100,7 +100,10 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegDac37, 0x08);     // bypass DAC equalizer
 
   setMute(false);
-  setVolume(70);
+  // Max digital volume -- the NS4150B amplifier and small speaker on this
+  // board have no separate analog gain stage to make up for a conservative
+  // digital volume, so anything less than max came out very quiet.
+  setVolume(100);
 
   Logger::info(kTag, "begin() complete");
   return true;
