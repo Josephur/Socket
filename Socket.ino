@@ -172,6 +172,23 @@ void pollBootButton() {
   wasPressed = pressed;
 }
 
+// TEMPORARY, for speaker/mic bring-up testing: play an audible tone on
+// every fresh touch tap, independent of whatever's on screen. Polls the
+// touch controller directly (separate from LVGL's own indev polling) so
+// this works regardless of what widget, if any, is under the touch point.
+// Remove once audio bring-up is confirmed working and this is no longer
+// needed as a quick manual trigger.
+void pollTouchForTestTone() {
+  static bool wasPressed = false;
+  uint16_t x, y;
+  bool pressed = g_touch.read(x, y);
+  if (pressed && !wasPressed) {
+    Logger::info(kTag, "Touch tap detected -- playing test tone");
+    AudioSelfTest::playTestTone(g_audioCodec);
+  }
+  wasPressed = pressed;
+}
+
 }  // namespace
 
 #if SOCKET_AUDIO_TEST_MODE
@@ -272,6 +289,7 @@ void setup() {
 void loop() {
   g_lvgl.tick();
   pollBootButton();
+  pollTouchForTestTone();
   updateScreenPower();
 
   // Throttled heartbeat so a hung/silent board is distinguishable from one

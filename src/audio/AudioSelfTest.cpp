@@ -23,8 +23,8 @@ float rms(const int16_t *samples, size_t count) {
 }
 
 void fillSineChunk(int16_t *buf, size_t count, uint32_t sampleRateHz,
-                    float &phase) {
-  float phaseStep = 2.0f * PI * kToneFrequencyHz / sampleRateHz;
+                    float freqHz, float &phase) {
+  float phaseStep = 2.0f * PI * freqHz / sampleRateHz;
   for (size_t i = 0; i < count; i++) {
     buf[i] = static_cast<int16_t>(kToneAmplitude * sinf(phase));
     phase += phaseStep;
@@ -54,7 +54,8 @@ ToneTestResult runToneDetectionTest(AudioCodec &codec, uint32_t sampleRateHz) {
   double toneSum = 0.0;
   constexpr int kToneChunks = 40;  // ~40 * 512 samples @ 24kHz =~ 0.85s
   for (int i = 0; i < kToneChunks; i++) {
-    fillSineChunk(toneChunk, kChunkSamples, sampleRateHz, phase);
+    fillSineChunk(toneChunk, kChunkSamples, sampleRateHz, kToneFrequencyHz,
+                  phase);
     codec.write(toneChunk, kChunkSamples);
     codec.read(chunk, kChunkSamples);
     toneSum += rms(chunk, kChunkSamples);
@@ -95,6 +96,23 @@ void runLiveLoopbackForever(AudioCodec &codec) {
                     String(rms(chunk, read)))
                        .c_str());
     }
+  }
+}
+
+void playTestTone(AudioCodec &codec, uint32_t sampleRateHz,
+                   uint32_t durationMs, float freqHz) {
+  Logger::info(kTag, ("playing test tone: " + String(freqHz) + "Hz for " +
+                       String(durationMs) + "ms")
+                          .c_str());
+  int16_t chunk[kChunkSamples];
+  float phase = 0.0f;
+  uint32_t totalSamples = sampleRateHz * durationMs / 1000;
+  uint32_t samplesWritten = 0;
+  while (samplesWritten < totalSamples) {
+    size_t thisChunk = min((uint32_t)kChunkSamples, totalSamples - samplesWritten);
+    fillSineChunk(chunk, thisChunk, sampleRateHz, freqHz, phase);
+    codec.write(chunk, thisChunk);
+    samplesWritten += thisChunk;
   }
 }
 

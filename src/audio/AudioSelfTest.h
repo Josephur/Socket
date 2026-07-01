@@ -30,4 +30,10 @@ ToneTestResult runToneDetectionTest(AudioCodec &codec,
 
 [[noreturn]] void runLiveLoopbackForever(AudioCodec &codec);
 
+// Plays a single audible tone out the speaker, blocking until done. No
+// recording -- just "make a sound right now," for on-demand testing (e.g.
+// wired to a touch tap in Socket.ino).
+void playTestTone(AudioCodec &codec, uint32_t sampleRateHz = 24000,
+                   uint32_t durationMs = 500, float freqHz = 1000.0f);
+
 }  // namespace AudioSelfTest
