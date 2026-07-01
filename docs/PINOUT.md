@@ -86,7 +86,17 @@ Connected via the P4's internal SDMMC peripheral. Pin mapping per ESP32-P4 refer
 
 | Port | Type | Function |
 |------|------|----------|
-| USB-UART | Type-C | Power, flashing, serial debug |
-| USB OTG | Type-A | USB 2.0 High Speed OTG |
+| USB-UART | Type-C | Power, flashing, serial debug -- wired to the P4 only |
+| USB OTG | Type-C | USB 2.0 High Speed OTG -- also wired to the P4 only |
+
+## ESP32-C6 co-processor flashing
+
+Neither USB-C port reaches the C6 -- it has its own separate 2.54mm 4-pin
+header ("For flashing firmware to the ESP32-C6 module" per Waveshare's
+hardware description). Flashing it requires an external USB-TTL adapter
+wired to that header, plus pulling C6_IO9 low at power-on to force the C6
+into its own download mode (independent of the P4's BOOT button). Under
+normal operation the C6 just runs Espressif's ESP-Hosted slave firmware and
+isn't something this project's firmware touches.
 
 > **Note on I2C Bus:** Touch, audio codec, PMU, RTC, and IMU all share I2C bus 1 (GPIO 7/8). Each has a unique address so there's no conflict.

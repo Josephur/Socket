@@ -1,0 +1,19 @@
+# Arduino Library Manager dependencies for Socket, one "Name@Version" per
+# line (matches `arduino-cli lib install` syntax). This is the single source
+# of truth for what every developer/CI machine installs -- see
+# scripts/install-libs.sh|ps1 and ci/compile.yml, which both read this file.
+#
+# The Waveshare GT911/I2C/display-init glue code is NOT here: it isn't a
+# registered Library Manager package, so it's vendored directly into
+# src/ui/board/ instead (see that folder's source, ported from
+# docs/Arduino/libraries/displays).
+
+GFX Library for Arduino@1.6.6
+lvgl@9.3.0
+ArduinoJson@7.2.0
+
+# Not yet wired into any module (PMU/RTC/IMU support isn't implemented yet),
+# but listed here since the shared I2C bus already carries these chips and
+# README.md calls them out as required.
+XPowersLib
+SensorLib

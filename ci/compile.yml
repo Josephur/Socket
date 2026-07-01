@@ -4,14 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'examples/**'
-      - 'lib/**'
+      - 'Socket.ino'
+      - 'src/**'
+      - 'libraries.txt'
       - '.github/workflows/compile.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'examples/**'
-      - 'lib/**'
 
 jobs:
   compile:
@@ -21,34 +19,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
       - name: Install Arduino CLI
         run: |
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
           sudo mv bin/arduino-cli /usr/local/bin/
 
-      - name: Configure Arduino CLI
+      - name: Configure Arduino CLI and ESP32 platform
         run: |
           arduino-cli config init
           arduino-cli config set board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-
-      - name: Install ESP32 platform
-        run: |
           arduino-cli core update-index
           arduino-cli core install esp32:esp32
 
-      - name: Install libraries
+      - name: Install libraries (from libraries.txt)
         run: |
-          arduino-cli lib install "GFX Library for Arduino" || echo "GFX lib not in index — will need offline install"
-          arduino-cli lib install "lvgl" || echo "lvgl not in index — will need offline install"
+          arduino-cli lib update-index
+          ./scripts/install-libs.sh
 
-      - name: Compile HelloWorld
+      - name: Provide placeholder secrets
+        run: cp src/config/Secrets.h.example src/config/Secrets.h
+
+      - name: Compile Socket.ino
         run: |
-          arduino-cli compile \
-            --fqbn esp32:esp32:esp32p4 \
-            --board-options "PSRAM=enabled,FlashMode=qio,FlashSize=16MB,PartitionScheme=16M_Fat" \
-            examples/01_HelloWorld/HelloWorld.ino
+          arduino-cli compile --fqbn esp32:esp32:esp32p4 \
+            --board-options "PSRAM=enabled,FlashMode=qio,FlashSize=32M,PartitionScheme=app5M_fat24M_32MB" \
+            .
