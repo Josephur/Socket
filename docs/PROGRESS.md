@@ -110,8 +110,21 @@ syntax attempts even on a fresh reset; a raw PowerShell serial read worked
 immediately -- worth trying that fallback before assuming the board itself
 is silent.
 
-**Next steps:** fill in real WiFi credentials + provisioning URL in
-`Secrets.h` and confirm the device actually reaches the IDLE screen; vendor
-the `es8311` component for real audio; spike the wake-word research
-question; start scoping the PHP `/api/converse` orchestration endpoint
-against the proposed wire format.
+**WiFi confirmed working end-to-end** with real credentials in `Secrets.h`
+-- connects and correctly falls through to the OFFLINE screen since
+`SOCKET_PROVISIONING_URL` is still a placeholder (no PHP server exists yet).
+
+**Added `src/core/RetryBackoff`:** the OFFLINE state was retrying WiFi
+reconnect + provisioning fetch on every single `loop()` tick once WiFi
+itself was up (only naturally throttled by the HTTP connect timeout).
+Added a staggered schedule (3, 5, 10, 15, 30, 60s, then holds at 60s) so a
+down/unreachable server won't get hammered once one exists. Verified via
+serial log that retries are correctly spaced, not spammed.
+
+**Next steps:** vendor the `es8311` component for real audio; spike the
+wake-word research question; start scoping the PHP `/api/converse`
+orchestration endpoint against the proposed wire format (see the open
+question about OpenWebUI custom Agents/Models vs. client-supplied prompts
+for how the LLM side of that endpoint should work); add commonly used
+AI-related emoji/icons from FiraCode Nerd Font Mono to the LVGL UI
+(avatar/status icons, idle screen) instead of plain text where appropriate.

@@ -24,6 +24,7 @@
 #include "src/config/RuntimeConfig.h"
 #include "src/core/AppState.h"
 #include "src/core/Logger.h"
+#include "src/core/RetryBackoff.h"
 #include "src/network/ConversationClient.h"
 #include "src/network/WiFiManager.h"
 #include "src/ui/DisplayDriver.h"
@@ -44,6 +45,10 @@ TouchDriver g_touch;
 LvglBridge g_lvgl;
 
 WiFiManager g_wifi;
+// Gates OFFLINE-state retries (WiFi reconnect + provisioning fetch) so a
+// down/unreachable server gets hit on a 3,5,10,15,30,60s-then-60s schedule
+// instead of every loop() tick.
+RetryBackoff g_provisioningBackoff;
 
 AudioCodec g_audioCodec;
 WakeWordDetector g_wakeWord(g_audioCodec);
@@ -70,6 +75,7 @@ void runProvisioning() {
   }
 
   Logger::info(kTag, ("Provisioned as: " + g_config.deviceName).c_str());
+  g_provisioningBackoff.reset();
   g_appState.transitionTo(AppState::kIdle);
   IdleScreen::show();
 }
@@ -186,10 +192,16 @@ void loop() {
       break;
 
     case AppState::kOffline:
-      if (g_wifi.reconnect()) {
-        runProvisioning();
-        if (g_appState.current() == AppState::kOffline) {
-          OfflineScreen::show();
+      // Gated by the backoff schedule so a down WiFi network or an
+      // unreachable provisioning server doesn't get hammered every 5ms --
+      // see RetryBackoff.h for the exact schedule.
+      if (g_provisioningBackoff.dueNow()) {
+        Logger::info(kTag, "OFFLINE retry due -- attempting reconnect");
+        if (g_wifi.reconnect()) {
+          runProvisioning();
+          if (g_appState.current() == AppState::kOffline) {
+            OfflineScreen::show();
+          }
         }
       }
       break;
