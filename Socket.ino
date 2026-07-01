@@ -172,10 +172,13 @@ void pollBootButton() {
   wasPressed = pressed;
 }
 
-// TEMPORARY, for speaker/mic bring-up testing: play an audible tone on
-// every fresh touch tap, independent of whatever's on screen. Polls the
-// touch controller directly (separate from LVGL's own indev polling) so
-// this works regardless of what widget, if any, is under the touch point.
+// TEMPORARY, for speaker/mic bring-up testing: run the record/playback
+// demo (3 beeps, record, 3 beeps, play it back) on every fresh touch tap,
+// independent of whatever's on screen. Polls the touch controller directly
+// (separate from LVGL's own indev polling) so this works regardless of
+// what widget, if any, is under the touch point. Blocking -- takes ~5
+// seconds total, during which loop()'s other polling (BOOT button, screen
+// timeout, WiFi retry) is paused, which is fine for a manual bring-up test.
 // Remove once audio bring-up is confirmed working and this is no longer
 // needed as a quick manual trigger.
 void pollTouchForTestTone() {
@@ -183,8 +186,8 @@ void pollTouchForTestTone() {
   uint16_t x, y;
   bool pressed = g_touch.read(x, y);
   if (pressed && !wasPressed) {
-    Logger::info(kTag, "Touch tap detected -- playing test tone");
-    AudioSelfTest::playTestTone(g_audioCodec);
+    Logger::info(kTag, "Touch tap detected -- running record/playback demo");
+    AudioSelfTest::runRecordPlaybackDemo(g_audioCodec);
   }
   wasPressed = pressed;
 }

@@ -1,6 +1,7 @@
 #include "AudioSelfTest.h"
 
 #include <Arduino.h>
+#include <esp_heap_caps.h>
 #include <math.h>
 
 #include "../core/Logger.h"
@@ -114,6 +115,63 @@ void playTestTone(AudioCodec &codec, uint32_t sampleRateHz,
     codec.write(chunk, thisChunk);
     samplesWritten += thisChunk;
   }
+}
+
+void playBeeps(AudioCodec &codec, int count, uint32_t sampleRateHz,
+               uint32_t beepMs, uint32_t gapMs, float freqHz) {
+  int16_t silence[kChunkSamples] = {0};
+  for (int i = 0; i < count; i++) {
+    if (i > 0) {
+      uint32_t gapSamples = sampleRateHz * gapMs / 1000;
+      uint32_t written = 0;
+      while (written < gapSamples) {
+        size_t thisChunk = min((uint32_t)kChunkSamples, gapSamples - written);
+        codec.write(silence, thisChunk);
+        written += thisChunk;
+      }
+    }
+    playTestTone(codec, sampleRateHz, beepMs, freqHz);
+  }
+}
+
+void runRecordPlaybackDemo(AudioCodec &codec, uint32_t sampleRateHz,
+                            uint32_t recordSeconds) {
+  Logger::info(kTag, "record/playback demo: 3 beeps...");
+  playBeeps(codec, 3, sampleRateHz);
+
+  size_t totalSamples = sampleRateHz * recordSeconds;
+  auto *recordBuf = static_cast<int16_t *>(
+      heap_caps_malloc(totalSamples * sizeof(int16_t), MALLOC_CAP_SPIRAM));
+  if (!recordBuf) {
+    Logger::error(kTag, "PSRAM allocation for record buffer failed");
+    return;
+  }
+
+  Logger::info(kTag, ("recording for " + String(recordSeconds) +
+                       "s -- talk now")
+                          .c_str());
+  size_t recorded = 0;
+  while (recorded < totalSamples) {
+    size_t toRead = min((size_t)kChunkSamples, totalSamples - recorded);
+    recorded += codec.read(recordBuf + recorded, toRead);
+  }
+  Logger::info(kTag, ("recording done, RMS: " + String(rms(recordBuf,
+                                                             totalSamples)))
+                          .c_str());
+
+  Logger::info(kTag, "3 beeps...");
+  playBeeps(codec, 3, sampleRateHz);
+
+  Logger::info(kTag, "playing back the recording...");
+  size_t written = 0;
+  while (written < totalSamples) {
+    size_t thisChunk = min((size_t)kChunkSamples, totalSamples - written);
+    codec.write(recordBuf + written, thisChunk);
+    written += thisChunk;
+  }
+
+  heap_caps_free(recordBuf);
+  Logger::info(kTag, "record/playback demo complete");
 }
 
 }  // namespace AudioSelfTest

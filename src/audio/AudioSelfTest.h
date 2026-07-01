@@ -36,4 +36,18 @@ ToneTestResult runToneDetectionTest(AudioCodec &codec,
 void playTestTone(AudioCodec &codec, uint32_t sampleRateHz = 24000,
                    uint32_t durationMs = 500, float freqHz = 1000.0f);
 
+// Plays `count` short beeps (with gaps of silence between them), blocking
+// until done. Used as an audible "start/stop" cue around a recording
+// window -- see runRecordPlaybackDemo().
+void playBeeps(AudioCodec &codec, int count, uint32_t sampleRateHz = 24000,
+               uint32_t beepMs = 150, uint32_t gapMs = 100,
+               float freqHz = 800.0f);
+
+// The full "record and play it back" bring-up test: 3 beeps, records for
+// `recordSeconds`, 3 beeps again, then plays back exactly what was
+// recorded. Blocking -- takes roughly 1 + recordSeconds + 1 seconds total.
+// Allocates the recording buffer from PSRAM and frees it before returning.
+void runRecordPlaybackDemo(AudioCodec &codec, uint32_t sampleRateHz = 24000,
+                            uint32_t recordSeconds = 3);
+
 }  // namespace AudioSelfTest
