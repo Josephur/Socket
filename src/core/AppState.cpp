@@ -27,8 +27,16 @@ bool AppStateMachine::transitionTo(AppState next) {
   // fail mid-conversation) and recovery always re-provisions, since v1 only
   // fetches config once and the device may have missed updates while down.
   if (next == AppState::kOffline) {
+    // Only a genuine BOOT/IDLE/etc -> OFFLINE transition counts as
+    // "connectivity changed" activity. Without this guard, every failed
+    // retry while already offline (see RetryBackoff) re-enters OFFLINE and
+    // would reset the screen-timeout countdown forever -- the device would
+    // never go idle as long as a server stayed unreachable.
+    bool wasAlreadyOffline = (state_ == AppState::kOffline);
     state_ = next;
-    ActivityMonitor::notify();
+    if (!wasAlreadyOffline) {
+      ActivityMonitor::notify();
+    }
     return true;
   }
 
