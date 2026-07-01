@@ -70,6 +70,16 @@ bool AudioCodec::i2sInit(uint32_t sampleRateHz) {
           },
   };
 
+  // MCLK must be 12.288MHz for both codecs' clock-divider coefficient
+  // tables to have a matching entry at 24kHz -- ES8311 and ES7210 each
+  // ship their own published table (see Es8311.cpp/Es7210.cpp, sourced
+  // from espressif/esp-bsp), and 12.288MHz/24kHz is the only MCLK value
+  // that appears in *both*. The default mclk_multiple (256x) gives
+  // 6.144MHz, for which ES7210's table has no 24kHz entry at all -- this
+  // was the root cause of the mic path returning all-zero samples. 512x
+  // fixes that for both chips at once.
+  stdCfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_512;
+
   if (i2s_channel_init_std_mode(g_txHandle, &stdCfg) != ESP_OK) return false;
   if (i2s_channel_init_std_mode(g_rxHandle, &stdCfg) != ESP_OK) return false;
   if (i2s_channel_enable(g_txHandle) != ESP_OK) return false;

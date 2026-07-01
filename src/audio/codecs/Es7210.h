@@ -4,16 +4,23 @@
 
 #include "driver/i2c_master.h"
 
-// Minimal ES7210 (dual-mic ADC path) bring-up over I2C, address 0x40.
+// ES7210 (dual-mic ADC path) bring-up over I2C, address 0x40.
 //
-// CONFIDENCE NOTE: same caveat as Es8311.h, but weaker here -- the ES7210
-// register map is less commonly reproduced in public reference code than
-// ES8311's, so this reconstruction carries more uncertainty. If the
-// loopback self-test shows the DAC/speaker side working but no signal ever
-// comes back from the mic, this file's register values are the first
-// suspect, not necessarily the physical hardware.
+// Register sequence and clock-divider coefficients are transcribed from
+// Espressif's real, public `es7210` driver
+// (https://github.com/espressif/esp-bsp/blob/master/components/es7210/es7210.c,
+// Apache-2.0), not reconstructed from memory. Only the single
+// clock-divider table row needed for this board's fixed configuration
+// (MCLK=12.288MHz, 24kHz, 16-bit I2S) is transcribed; if the sample rate
+// ever changes, pull the matching row from the real `es7210_coeff_div[]`
+// table rather than guessing.
 class Es7210 {
  public:
+  // sampleRateHz must match AudioCodec's I2S config, and the I2S
+  // mclk_multiple must be 512 (12.288MHz MCLK) -- see
+  // AudioCodec::i2sInit()'s comment for why (this codec's coefficient
+  // table has no 24kHz entry at the 256x/6.144MHz default at all, which
+  // was the original bug: silent/all-zero mic capture).
   bool begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz);
 
  private:

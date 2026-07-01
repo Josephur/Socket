@@ -210,3 +210,49 @@ than continuing to guess; once mic capture produces nonzero RMS, rerun the
 tone-detection self-test for a real pass/fail; set
 `SOCKET_AUDIO_TEST_MODE` back to 0 once audio is confirmed working to
 return to the normal app.
+
+## Speaker/mic bring-up: resolved
+
+Added a tap-to-play test tone (`AudioSelfTest::playTestTone`, wired to any
+touch tap in `Socket.ino`) for on-demand testing since the boot-time tone
+wasn't audible. User confirmed touch detection was working (taps logged
+correctly, tone-generation code ran) but heard **no sound at all** --
+pointing at the speaker output stage specifically, not touch/detection.
+
+Rather than keep guessing at register values, pulled the actual public
+Espressif drivers via `gh api`:
+`github.com/espressif/esp-bsp/components/es8311` and `.../es7210`
+(Apache-2.0). Two real bugs found by diffing against my earlier
+reconstruction:
+
+1. **ES8311 was missing the post-reset power-on write.** The real
+   `es8311_init()` does reset (`REG00=0x1F` -> delay -> `REG00=0x00`) *then*
+   `REG00=0x80` ("power-on command"). My version stopped after the `0x00`
+   write -- the chip was never actually powered on.
+2. **Wrong MCLK ratio entirely, affecting both codecs.** ES8311 and ES7210
+   each ship their own MCLK-to-sample-rate coefficient table (real values,
+   not reconstructed). Our I2S was using the default 256x multiple
+   (6.144MHz MCLK @ 24kHz), which exists in ES8311's table but has **no
+   24kHz entry at all** in ES7210's table -- explaining exactly why the mic
+   returned all-zero samples while the speaker chip's ID read still
+   succeeded. Fixed in `AudioCodec::i2sInit()` by setting
+   `mclk_multiple = I2S_MCLK_MULTIPLE_512` (12.288MHz), the one MCLK value
+   both tables agree on at 24kHz. Rewrote `Es8311.cpp`/`Es7210.cpp`'s
+   register sequences to match the real drivers' values for that exact
+   MCLK/rate combination (not the full dynamic table -- just the one row
+   this board's fixed 24kHz config needs; see each file's header for the
+   real source URLs and a note to look up a different row if the sample
+   rate ever changes).
+
+**Result after reflashing:** baseline (silence) RMS 28.09, tone-playing RMS
+2614.71 (~93x jump) -- `AudioSelfTest` reports TONE DETECTED / SELF-TEST
+PASSED. Both the speaker and mic paths are now confirmed physically
+working via measured hardware data, not just register writes succeeding.
+
+**Next steps:** try `AudioSelfTest::runLiveLoopbackForever` again now that
+the mic path streams real data, for an actual voice loopback test; remove
+the temporary tap-to-play test tone once satisfied; consider adding
+`es8311_voice_fade`-style volume ramping later for less jarring TTS
+playback; set `SOCKET_AUDIO_TEST_MODE` back to 0 (already done) and move on
+to wiring real `AudioRecorder`/`AudioPlayer` usage into the conversation
+flow.
