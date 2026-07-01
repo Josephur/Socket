@@ -121,10 +121,39 @@ Added a staggered schedule (3, 5, 10, 15, 30, 60s, then holds at 60s) so a
 down/unreachable server won't get hammered once one exists. Verified via
 serial log that retries are correctly spaced, not spammed.
 
+**Added screen timeout (5 min idle -> backlight off).** New
+`src/core/ActivityMonitor` centralizes "what counts as activity" in one
+place: touch input, the BOOT button (GPIO35, standing in for a real wake
+button until one exists), and any successful `AppState` transition -- which
+covers connectivity changes (OFFLINE<->IDLE) and will automatically cover
+wake-word detection once that's implemented, with no extra wiring needed.
+`Socket.ino` polls this each `loop()` tick and toggles `DisplayDriver`'s
+backlight; rendering itself keeps running underneath, only the backlight
+cuts out.
+
+**Bug found and fixed during verification:** the screen never timed out in
+the first real test (left running 30+ min). Root cause: `AppStateMachine::
+transitionTo()` treated *every* entry into OFFLINE as activity, including
+re-entering OFFLINE from OFFLINE on each failed retry -- so as long as the
+(nonexistent) provisioning server stayed unreachable, the device kept
+waking itself back up every retry cycle (every <=60s via `RetryBackoff`)
+and the countdown never survived long enough to fire. Fixed by only
+counting a *genuine* state change into OFFLINE as activity. Verified via a
+6-minute serial capture: `screen timed out after 5 min idle` fired exactly
+once and stayed off through repeated offline retries afterward. User
+confirmed visually -- screen went dark, touch woke it back up immediately.
+
+**Toolchain note:** for testing timing-sensitive behavior like this, a
+background serial capture (raw PowerShell `SerialPort`, run in the
+background for N minutes, grep the log afterward) works well and avoids
+needing to babysit a live monitor session.
+
 **Next steps:** vendor the `es8311` component for real audio; spike the
 wake-word research question; start scoping the PHP `/api/converse`
 orchestration endpoint against the proposed wire format (see the open
 question about OpenWebUI custom Agents/Models vs. client-supplied prompts
 for how the LLM side of that endpoint should work); add commonly used
 AI-related emoji/icons from FiraCode Nerd Font Mono to the LVGL UI
-(avatar/status icons, idle screen) instead of plain text where appropriate.
+(avatar/status icons, idle screen) instead of plain text where appropriate;
+consider a dedicated physical wake button instead of reusing BOOT (GPIO35)
+long-term.
