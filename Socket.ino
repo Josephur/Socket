@@ -254,19 +254,6 @@ void audioDemoTask(void * /*unused*/) {
   vTaskDelete(nullptr);
 }
 
-void pollTouchForTestTone() {
-  static bool wasPressed = false;
-  uint16_t x, y;
-  bool pressed = g_touch.read(x, y);
-  if (pressed && !wasPressed && !g_audioDemoInFlight) {
-    Logger::info(kTag, "Touch tap detected -- running record/playback demo");
-    g_audioDemoInFlight = true;
-    xTaskCreatePinnedToCore(audioDemoTask, "audio-demo", 8192, nullptr,
-                             tskIDLE_PRIORITY + 1, nullptr, /*core=*/1);
-  }
-  wasPressed = pressed;
-}
-
 // TEMPORARY debug aid: a small dot that follows the touch point on top of
 // whatever screen is showing, so a press can be visually confirmed even if
 // downstream behavior (audio, screen transitions) isn't working -- answers
@@ -289,15 +276,40 @@ void createTouchIndicator() {
   lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
 }
 
-void updateTouchIndicator() {
+// Single touch poll per loop() tick, shared by the audio-demo trigger and
+// the indicator dot -- previously each had its own g_touch.read() call,
+// doubling I2C traffic on the shared bus for no reason. Also logs every
+// raw press/release edge with a timestamp (temporary -- see the "taps do
+// nothing" debugging this is for) so we can tell whether the touch
+// controller itself is missing quick taps versus this loop just not
+// polling often enough to catch them.
+void pollTouch() {
+  static bool wasPressed = false;
   uint16_t x, y;
   bool pressed = g_touch.read(x, y);
+
+  if (pressed != wasPressed) {
+    Logger::info(kTag, (String("touch edge: ") + (pressed ? "DOWN" : "UP") +
+                         " at t=" + String(millis()) +
+                         (pressed ? (" (" + String(x) + "," + String(y) + ")")
+                                  : ""))
+                            .c_str());
+  }
+
   if (pressed) {
     lv_obj_set_pos(g_touchIndicator, x - 14, y - 14);
     lv_obj_clear_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
   }
+
+  if (pressed && !wasPressed && !g_audioDemoInFlight) {
+    Logger::info(kTag, "Touch tap detected -- running record/playback demo");
+    g_audioDemoInFlight = true;
+    xTaskCreatePinnedToCore(audioDemoTask, "audio-demo", 8192, nullptr,
+                             tskIDLE_PRIORITY + 1, nullptr, /*core=*/1);
+  }
+  wasPressed = pressed;
 }
 
 }  // namespace
@@ -407,10 +419,25 @@ void setup() {
 }
 
 void loop() {
+  // TEMPORARY diagnostic for "taps do nothing" -- if a single loop() tick
+  // takes an unusually long time, touch polling stalls for exactly that
+  // long and quick taps get missed even though the touch controller itself
+  // saw them. 20ms is well above the 5ms delay() at the bottom of this
+  // loop, so anything over that means something in the tick (LVGL render,
+  // I2C contention, etc) is the real bottleneck, not the polling code.
+  static uint32_t lastLoopMs = 0;
+  uint32_t nowMs = millis();
+  uint32_t loopDeltaMs = nowMs - lastLoopMs;
+  lastLoopMs = nowMs;
+  if (loopDeltaMs > 20) {
+    Logger::warn(kTag, (String("slow loop() tick: ") + String(loopDeltaMs) +
+                         "ms at t=" + String(nowMs))
+                            .c_str());
+  }
+
   g_lvgl.tick();
   pollBootButton();
-  pollTouchForTestTone();
-  updateTouchIndicator();
+  pollTouch();
   updateScreenPower();
 
   // Throttled heartbeat so a hung/silent board is distinguishable from one
