@@ -267,6 +267,39 @@ void pollTouchForTestTone() {
   wasPressed = pressed;
 }
 
+// TEMPORARY debug aid: a small dot that follows the touch point on top of
+// whatever screen is showing, so a press can be visually confirmed even if
+// downstream behavior (audio, screen transitions) isn't working -- answers
+// "is touch registering at all?" independent of everything else. Lives on
+// lv_layer_top() so it draws above every screen without needing to be
+// added to each one individually, and is non-clickable so it never steals
+// touch input from the real UI underneath.
+//
+// Remove once touch + audio are both confirmed working end to end.
+lv_obj_t *g_touchIndicator = nullptr;
+
+void createTouchIndicator() {
+  g_touchIndicator = lv_obj_create(lv_layer_top());
+  lv_obj_remove_style_all(g_touchIndicator);
+  lv_obj_set_size(g_touchIndicator, 28, 28);
+  lv_obj_set_style_radius(g_touchIndicator, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(g_touchIndicator, lv_color_hex(0x00FF00), 0);
+  lv_obj_set_style_bg_opa(g_touchIndicator, LV_OPA_70, 0);
+  lv_obj_clear_flag(g_touchIndicator, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
+}
+
+void updateTouchIndicator() {
+  uint16_t x, y;
+  bool pressed = g_touch.read(x, y);
+  if (pressed) {
+    lv_obj_set_pos(g_touchIndicator, x - 14, y - 14);
+    lv_obj_clear_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 }  // namespace
 
 #if SOCKET_AUDIO_TEST_MODE
@@ -332,6 +365,7 @@ void setup() {
   IdleScreen::create();
   ConversationScreen::create();
   OfflineScreen::create();
+  createTouchIndicator();
 
   Logger::info(kTag, "step: audioCodec.begin()");
   if (!g_audioCodec.begin()) {
@@ -376,6 +410,7 @@ void loop() {
   g_lvgl.tick();
   pollBootButton();
   pollTouchForTestTone();
+  updateTouchIndicator();
   updateScreenPower();
 
   // Throttled heartbeat so a hung/silent board is distinguishable from one
