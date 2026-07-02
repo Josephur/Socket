@@ -31,12 +31,17 @@ Add-Type -AssemblyName System.Drawing
 $sp = New-Object System.IO.Ports.SerialPort $Port, $Baud, 'None', 8, 'One'
 $sp.ReadTimeout = 2000
 $sp.NewLine = "`n"
-# Both handshake lines must be asserted: with DTR deasserted the bridge/CDC
-# stack silently drops host->device bytes (SNAP never arrives), and
-# asserting DTR+RTS *together* keeps the auto-reset circuit neutral so the
-# board doesn't reboot or drop into the bootloader on port open.
-$sp.DtrEnable = $true
-$sp.RtsEnable = $true
+# CRITICAL: leave DTR and RTS both DEASSERTED (the defaults). The board's
+# auto-reset circuit resets the chip when RTS is high while DTR is low
+# (rebooting the board and destroying the very screen state being
+# captured), and resets it INTO THE BOOTLOADER ("waiting for download",
+# needs another reset to recover) when DTR is high while RTS is low during
+# that reset. Windows applies the lines non-atomically during Open(), so
+# any asserted combination can transiently hit one of those states.
+# With both never asserted, no ordering can trigger either. Host->device
+# data flows fine without DTR; the SNAP retry below covers the first
+# moments while the port settles. Verified: 3 consecutive opens, no
+# reboots, all answered.
 $sp.Open()
 try {
     $sp.DiscardInBuffer()

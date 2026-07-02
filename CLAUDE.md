@@ -19,8 +19,8 @@ When asked to "take a screenshot" (or you want to see the UI yourself):
   ScreenshotService firmware flashed (any build since July 2026).
 - The script doubles as a serial monitor: device log lines print to the
   console while it waits, so you also get recent logs for free.
-- Opening the COM port sometimes reboots the board (auto-reset circuit
-  race). The script retries `SNAP` automatically; expect ~3-15s total.
+- It captures the screen as-is, without rebooting the board (see the
+  serial section below for why that matters). Expect ~3-10s total.
 
 ## Build & flash
 
@@ -34,11 +34,18 @@ Boot takes ~3s and runs an audio self-test (tone + mic check) before
 
 ## Reading serial from scripts
 
-Assert **both** DTR and RTS before opening the port — with DTR deasserted
-the device never receives host->device bytes, and asserting both together
-keeps the auto-reset circuit neutral. 115200 baud. PowerShell gotcha:
-`-shl` keeps the left operand's byte type (`[byte]$b -shl 8` wraps to 0);
-cast `[int]` first.
+Leave DTR and RTS both **deasserted** (the .NET SerialPort defaults) when
+opening COM3. The auto-reset circuit reboots the chip if RTS goes high
+while DTR is low, and reboots it INTO THE BOOTLOADER ("waiting for
+download") if DTR is high while RTS is low during a reset — and Windows
+applies the lines non-atomically on open, so any asserted combination can
+transiently hit one of those. Both-deasserted is safe in every ordering;
+host->device data flows fine without DTR (send commands with a short
+retry to cover port settling). To deliberately reset the board: open with
+RTS asserted + DTR deasserted, hold ~150ms, deassert RTS. To recover from
+accidental bootloader mode: same reset pulse. 115200 baud. PowerShell
+gotcha: `-shl` keeps the left operand's byte type (`[byte]$b -shl 8`
+wraps to 0); cast `[int]` first.
 
 ## Hardware gotchas that have burned time before
 
