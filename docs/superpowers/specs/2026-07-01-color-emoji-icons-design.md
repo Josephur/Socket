@@ -34,11 +34,14 @@ color. Full color requires a different LVGL primitive: image widgets
 - **Rendering**: each icon becomes its own `lv_img_dsc_t` displayed via
   `lv_img_create()` + `lv_img_set_src()`, not a label+font. This is a
   different LVGL widget type than the existing `AiIcons` usage.
-- **Placement**: add a second, separate test row on `OfflineScreen`,
-  below the existing monochrome row, so both can be visually compared
-  before deciding where either actually lives permanently in the UI.
-  Neither icon set has a permanent home yet — that's an explicitly
-  deferred decision from the prior session.
+- **Placement**: replace the existing monochrome icon row on
+  `OfflineScreen` with the new color row (same position/size), rather
+  than showing both side by side. The mono `AiIcons` font and
+  `lv_font_ai_icons_24.c` stay in the codebase (documented in
+  `docs/ICONS.md`, still available for anywhere a single-tint icon is
+  actually wanted later) — only the *test row currently on screen* is
+  swapped. Neither icon set has a permanent long-term UI home yet —
+  that's still a deferred decision.
 - **File layout**: new `src/ui/icons/` directory (separate from
   `src/ui/fonts/` since these are images, not a font) — one `.c`/`.h`
   pair per icon, following the same per-symbol-constant pattern as
@@ -76,6 +79,6 @@ new widget type), so:
 
 - Deciding the permanent UI location for either icon set (status bar,
   conversation screen, etc.) — still deferred.
-- Removing the existing monochrome test row — left in place for
-  comparison per this design.
+- Deleting the mono `AiIcons` font/code — it stays in the repo, just
+  off-screen, for future use where a single-tint icon fits better.
 - Any additional emoji beyond the 17 listed above.
