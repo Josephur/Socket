@@ -2,18 +2,28 @@
 # See src/ui/ScreenshotService.h for the device-side protocol.
 #
 # Usage:
-#   ./scripts/screenshot.ps1                          # COM3 -> screenshot.png
+#   ./scripts/screenshot.ps1                  # COM3 -> screenshots/screenshot-<timestamp>.png
 #   ./scripts/screenshot.ps1 -Port COM5 -OutFile ui.png
+#
+# Screenshots accumulate in screenshots/ with unique timestamped names --
+# nothing is ever overwritten or cleaned up automatically; delete manually
+# when no longer needed.
 #
 # Ordinary log lines received during the transfer are echoed to the console,
 # so this doubles as a serial monitor while it waits -- no special client
 # needed to see debug output and screenshots side by side.
 param(
     [string]$Port = 'COM3',
-    [string]$OutFile = 'screenshot.png',
+    [string]$OutFile = '',
     [int]$Baud = 115200,
     [int]$TimeoutSec = 60
 )
+
+if (-not $OutFile) {
+    $dir = Join-Path $PSScriptRoot '..\screenshots'
+    if (-not (Test-Path $dir)) { $null = New-Item -ItemType Directory $dir }
+    $OutFile = Join-Path $dir "screenshot-$(Get-Date -Format 'yyyyMMdd-HHmmss').png"
+}
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -103,7 +113,10 @@ try {
     $data = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::WriteOnly, $bmp.PixelFormat)
     [System.Runtime.InteropServices.Marshal]::Copy($pixels, 0, $data.Scan0, $pixels.Length)
     $bmp.UnlockBits($data)
-    $bmp.Save((Join-Path (Get-Location) $OutFile), [System.Drawing.Imaging.ImageFormat]::Png)
+    if (-not [System.IO.Path]::IsPathRooted($OutFile)) {
+        $OutFile = Join-Path (Get-Location) $OutFile
+    }
+    $bmp.Save($OutFile, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
     Write-Host "saved $OutFile ($($rleStream.Length) RLE bytes over the wire, $($width * $height * 2) raw)"
 } finally {

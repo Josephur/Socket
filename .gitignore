@@ -27,6 +27,7 @@ arduino-cli/
 docs/Arduino/libraries/GFX_Library_for_Arduino/
 docs/Arduino/libraries/lvgl/
 
-# local screenshot script output
-/screenshot.png
-/test-screenshot.png
+# Local screenshot script output. Screenshots accumulate here with
+# timestamped names and are only ever deleted manually; kept out of git so
+# they don't bloat the repo (git add -f a specific one if it's worth keeping).
+/screenshots/
