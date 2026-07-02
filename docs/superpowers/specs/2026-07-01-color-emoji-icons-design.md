@@ -53,6 +53,25 @@ color. Full color requires a different LVGL primitive: image widgets
   picking up this repo doesn't have to reverse-engineer either pipeline
   from scratch.
 
+## Verification
+
+Compiling clean is not sufficient evidence this works — the last icon
+set (monochrome Nerd Font) compiled fine but crashed the device on every
+boot once actually rendered, because the failure mode only showed up in
+LVGL's rasterizer at runtime. Same risk applies here (new image format,
+new widget type), so:
+
+- Compile via `arduino-cli`, fix any errors.
+- Flash to the physical device on COM3 (same as this session's earlier
+  fixes).
+- Capture serial output after reset and confirm no `Guru Meditation
+  Error` / reboot loop, same method used to catch the font bug.
+- Serial logs can't confirm the icons are the *right* colors, only that
+  the device didn't crash — so after a clean boot is confirmed, ask the
+  user to visually check the device screen and confirm the color icon
+  row actually shows correct, correctly-colored emoji (not garbled
+  pixels, wrong colors, or a blank row), before considering this done.
+
 ## Out of scope
 
 - Deciding the permanent UI location for either icon set (status bar,
