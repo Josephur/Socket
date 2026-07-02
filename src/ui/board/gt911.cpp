@@ -186,6 +186,19 @@ static esp_err_t esp_lcd_touch_gt911_exit_sleep(esp_lcd_touch_handle_t tp)
     return ESP_OK;
 }
 
+// Whether the most recent esp_lcd_touch_gt911_read_data() call found a
+// fresh sample (buffer-status bit 0x80 set). The GT911 only posts a new
+// sample once per internal scan cycle (~10ms); polls that land between
+// scans read a stale/cleared status byte. Callers polling faster than the
+// scan rate need this to tell "no new data yet -- keep previous state"
+// apart from a genuine release (which IS a fresh sample, with 0 points).
+static volatile bool s_last_read_fresh = false;
+
+bool touch_gt911_last_read_fresh(void)
+{
+    return s_last_read_fresh;
+}
+
 static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
 {
     esp_err_t err;
@@ -198,6 +211,8 @@ static esp_err_t esp_lcd_touch_gt911_read_data(esp_lcd_touch_handle_t tp)
 
     err = touch_gt911_i2c_read(tp, ESP_LCD_TOUCH_GT911_READ_XY_REG, buf, 1);
     ESP_RETURN_ON_ERROR(err, TAG, "I2C read error!");
+
+    s_last_read_fresh = ((buf[0] & 0x80) == 0x80);
 
     /* Any touch data? */
     if ((buf[0] & 0x80) == 0x00) {

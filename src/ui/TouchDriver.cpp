@@ -35,20 +35,33 @@ bool TouchDriver::read(uint16_t &x, uint16_t &y) {
   if (!touchHandle_) return false;
 
   auto tp = static_cast<esp_lcd_touch_handle_t>(touchHandle_);
-  static constexpr uint8_t kMaxPoints = 5;
-  uint16_t xs[kMaxPoints] = {0};
-  uint16_t ys[kMaxPoints] = {0};
-  uint16_t strength[kMaxPoints] = {0};
-  uint8_t count = 0;
 
   esp_lcd_touch_read_data(tp);
-  bool pressed =
-      esp_lcd_touch_get_coordinates(tp, xs, ys, strength, &count, kMaxPoints);
 
-  if (pressed && count > 0) {
-    x = xs[0];
-    y = ys[0];
-    return true;
+  // Only a fresh GT911 sample may change the cached state. The controller
+  // scans at ~100Hz while this can be polled every ~5ms from loop() AND
+  // every ~33ms from LVGL's indev callback; get_coordinates() zeroes the
+  // driver's point buffer on every call, so without this gate whichever
+  // poller reads second (or lands between scan cycles) would see a phantom
+  // release mid-press -- the cause of missed taps and a skipping cursor.
+  if (touch_gt911_last_read_fresh()) {
+    static constexpr uint8_t kMaxPoints = 5;
+    uint16_t xs[kMaxPoints] = {0};
+    uint16_t ys[kMaxPoints] = {0};
+    uint16_t strength[kMaxPoints] = {0};
+    uint8_t count = 0;
+    bool pressed = esp_lcd_touch_get_coordinates(tp, xs, ys, strength, &count,
+                                                  kMaxPoints);
+    pressed_ = pressed && count > 0;
+    if (pressed_) {
+      x_ = xs[0];
+      y_ = ys[0];
+    }
   }
-  return false;
+
+  if (pressed_) {
+    x = x_;
+    y = y_;
+  }
+  return pressed_;
 }

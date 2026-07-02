@@ -91,6 +91,17 @@ esp_lcd_touch_handle_t touch_gt911_init(DEV_I2C_Port port);
 touch_gt911_point_t touch_gt911_read_point(uint8_t max_touch_cnt);
 
 /**
+ * @brief Whether the most recent esp_lcd_touch_read_data() call on the GT911
+ *        found a fresh sample (controller buffer-status bit set).
+ *
+ * The GT911 posts a new sample only once per internal scan cycle (~10ms).
+ * When polling faster than that, a "no points" result with this returning
+ * false means "no new data yet" (keep the previous touch state), while a
+ * fresh sample with 0 points is a genuine release.
+ */
+bool touch_gt911_last_read_fresh(void);
+
+/**
  * @brief Touch IO configuration structure for GT911
  *
  * This macro initializes the configuration structure for the GT911 touch controller's 
