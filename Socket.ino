@@ -14,6 +14,9 @@
 #endif
 
 #include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 // Set to 1 to boot straight into the speaker/mic bring-up test instead of
 // the normal app: runs an automated tone-detection self-test, then a live
@@ -79,29 +82,85 @@ WakeWordDetector g_wakeWord(g_audioCodec);
 AudioRecorder g_recorder(g_audioCodec);
 AudioPlayer g_player(g_audioCodec);
 
-// Attempts WiFi connect + provisioning fetch. Transitions to kIdle on
-// success or kOffline on failure (see AppState.h for the OFFLINE
-// recovery path: it always re-enters kProvisioning).
-void runProvisioning() {
-  Logger::info(kTag, "runProvisioning() start");
-  if (!g_wifi.isConnected() && !g_wifi.begin()) {
+// WiFi connect + provisioning fetch both make blocking network calls (WiFi
+// association, then an HTTPS GET) that can take up to the better part of a
+// minute when the AP or the provisioning server is slow/unreachable. Running
+// that directly from loop() -- as this used to -- froze loop() for the
+// duration, which meant touch input and the audio self-test (both polled
+// from loop(), see pollTouchForTestTone() below) went dead every time the
+// OFFLINE retry fired. Since touch/audio have nothing to do with the network
+// stack, they should never be held hostage by it.
+//
+// Fix: run the network attempt on its own FreeRTOS task, pinned to core 0
+// (alongside the WiFi/BLE stack) so it never contends with the core-1 loop()
+// task for CPU time. loop() just polls a queue for the result -- it never
+// blocks waiting for the task.
+struct NetworkAttemptResult {
+  bool success;
+  RuntimeConfig config;
+};
+
+// The queue carries a heap-allocated pointer, not the struct by value:
+// xQueueSend() copies items with a raw memcpy, which would bypass String's
+// copy constructor and corrupt RuntimeConfig's String fields (deviceName
+// etc.) if NetworkAttemptResult itself were the queue item type. A pointer
+// is trivially copyable, so memcpy-ing it is safe; loop() takes ownership
+// and deletes it after use (see applyNetworkAttemptResult()'s caller).
+QueueHandle_t g_networkResultQueue = nullptr;
+volatile bool g_networkAttemptInFlight = false;
+
+void networkAttemptTask(void * /*unused*/) {
+  auto *result = new NetworkAttemptResult();
+  result->success = false;
+
+  Logger::info(kTag, "networkAttemptTask() start");
+  if (!g_wifi.isConnected() && !g_wifi.reconnect()) {
     Logger::error(kTag, "WiFi connect failed, seeding fallback credentials");
     if (!g_wifi.setCredentials(SOCKET_WIFI_SSID, SOCKET_WIFI_PASSWORD)) {
-      g_appState.transitionTo(AppState::kOffline);
+      xQueueSend(g_networkResultQueue, &result, 0);
+      g_networkAttemptInFlight = false;
+      vTaskDelete(nullptr);
       return;
     }
   }
 
-  if (!ProvisioningClient::fetch(SOCKET_PROVISIONING_URL, g_config)) {
+  if (!ProvisioningClient::fetch(SOCKET_PROVISIONING_URL, result->config)) {
     Logger::error(kTag, "Provisioning fetch failed");
-    g_appState.transitionTo(AppState::kOffline);
+    xQueueSend(g_networkResultQueue, &result, 0);
+    g_networkAttemptInFlight = false;
+    vTaskDelete(nullptr);
     return;
   }
 
-  Logger::info(kTag, ("Provisioned as: " + g_config.deviceName).c_str());
-  g_provisioningBackoff.reset();
-  g_appState.transitionTo(AppState::kIdle);
-  IdleScreen::show();
+  Logger::info(kTag, ("Provisioned as: " + result->config.deviceName).c_str());
+  result->success = true;
+  xQueueSend(g_networkResultQueue, &result, 0);
+  g_networkAttemptInFlight = false;
+  vTaskDelete(nullptr);
+}
+
+// Kicks off networkAttemptTask() if one isn't already running. Safe to call
+// every loop() tick -- it's a no-op while an attempt is in flight.
+void startNetworkAttemptIfIdle() {
+  if (g_networkAttemptInFlight) return;
+  g_networkAttemptInFlight = true;
+  xTaskCreatePinnedToCore(networkAttemptTask, "net-attempt", 8192, nullptr,
+                           tskIDLE_PRIORITY + 1, nullptr, /*core=*/0);
+}
+
+// Applies a finished networkAttemptTask() result on the main thread (never
+// from the task itself -- AppState and the LVGL-backed screens aren't
+// thread-safe). Called from loop() once the result queue has something.
+void applyNetworkAttemptResult(const NetworkAttemptResult &result) {
+  if (result.success) {
+    g_config = result.config;
+    g_provisioningBackoff.reset();
+    g_appState.transitionTo(AppState::kIdle);
+    IdleScreen::show();
+  } else {
+    g_appState.transitionTo(AppState::kOffline);
+    OfflineScreen::show();
+  }
 }
 
 void runConversationTurn() {
@@ -172,22 +231,38 @@ void pollBootButton() {
   wasPressed = pressed;
 }
 
-// TEMPORARY, for speaker/mic bring-up testing: run the record/playback
-// demo (3 beeps, record, 3 beeps, play it back) on every fresh touch tap,
+// TEMPORARY, for speaker/mic bring-up testing: run the record/playback demo
+// (3 beeps, record, 3 beeps, play it back) on every fresh touch tap,
 // independent of whatever's on screen. Polls the touch controller directly
-// (separate from LVGL's own indev polling) so this works regardless of
-// what widget, if any, is under the touch point. Blocking -- takes ~5
-// seconds total, during which loop()'s other polling (BOOT button, screen
-// timeout, WiFi retry) is paused, which is fine for a manual bring-up test.
+// (separate from LVGL's own indev polling) so this works regardless of what
+// widget, if any, is under the touch point.
+//
+// The demo itself takes ~5 seconds, so it runs on its own task instead of
+// inline in loop() -- otherwise it would freeze touch/LVGL/BOOT-button
+// polling for its whole duration, same problem as the old blocking WiFi
+// calls above. g_audioDemoInFlight guards against overlapping runs (a tap
+// mid-demo is just ignored) since AudioCodec isn't meant to be driven from
+// two tasks at once.
+//
 // Remove once audio bring-up is confirmed working and this is no longer
 // needed as a quick manual trigger.
+volatile bool g_audioDemoInFlight = false;
+
+void audioDemoTask(void * /*unused*/) {
+  AudioSelfTest::runRecordPlaybackDemo(g_audioCodec);
+  g_audioDemoInFlight = false;
+  vTaskDelete(nullptr);
+}
+
 void pollTouchForTestTone() {
   static bool wasPressed = false;
   uint16_t x, y;
   bool pressed = g_touch.read(x, y);
-  if (pressed && !wasPressed) {
+  if (pressed && !wasPressed && !g_audioDemoInFlight) {
     Logger::info(kTag, "Touch tap detected -- running record/playback demo");
-    AudioSelfTest::runRecordPlaybackDemo(g_audioCodec);
+    g_audioDemoInFlight = true;
+    xTaskCreatePinnedToCore(audioDemoTask, "audio-demo", 8192, nullptr,
+                             tskIDLE_PRIORITY + 1, nullptr, /*core=*/1);
   }
   wasPressed = pressed;
 }
@@ -277,22 +352,22 @@ void setup() {
        String(heap_caps_get_free_size(MALLOC_CAP_DMA)) + " bytes")
           .c_str());
 
-  // Deliberately NOT calling runProvisioning() here: it blocks on WiFi
-  // connect + an HTTPS request to the provisioning server, which can take
-  // a long time (or the better part of a minute) when that server is
-  // unreachable/slow to resolve. Since loop() -- and therefore all touch/
-  // button polling -- doesn't start until setup() returns, that made the
-  // screen look fully booted (display was already up) while inputs were
-  // silently ignored for as long as this blocked. Instead, go straight to
-  // OFFLINE and let loop()'s existing RetryBackoff-gated retry (below)
-  // make the first real attempt a few seconds in, once loop() is already
-  // running and responsive.
+  // Deliberately NOT attempting a network connection here: loop() -- and
+  // therefore all touch/button polling -- doesn't start until setup()
+  // returns, so doing it here would make the screen look fully booted
+  // (display was already up) while inputs were silently ignored for as long
+  // as it took. Instead, go straight to OFFLINE and let loop()'s existing
+  // RetryBackoff-gated retry (below) kick off the first background network
+  // attempt a few seconds in, once loop() is already running and
+  // responsive.
   Logger::info(kTag, "deferring first provisioning attempt to loop()");
   g_appState.transitionTo(AppState::kOffline);
   OfflineScreen::show();
 
   pinMode(kBootButtonPin, INPUT_PULLUP);
   ActivityMonitor::notify();  // start the screen-timeout countdown fresh
+
+  g_networkResultQueue = xQueueCreate(1, sizeof(NetworkAttemptResult *));
 
   Logger::info(kTag, "=== setup() complete ===");
 }
@@ -318,20 +393,23 @@ void loop() {
       }
       break;
 
-    case AppState::kOffline:
+    case AppState::kOffline: {
       // Gated by the backoff schedule so a down WiFi network or an
       // unreachable provisioning server doesn't get hammered every 5ms --
-      // see RetryBackoff.h for the exact schedule.
+      // see RetryBackoff.h for the exact schedule. The actual attempt runs
+      // on a background task (see startNetworkAttemptIfIdle() above) so
+      // this never blocks loop().
       if (g_provisioningBackoff.dueNow()) {
-        Logger::info(kTag, "OFFLINE retry due -- attempting reconnect");
-        if (g_wifi.reconnect()) {
-          runProvisioning();
-          if (g_appState.current() == AppState::kOffline) {
-            OfflineScreen::show();
-          }
-        }
+        Logger::info(kTag, "OFFLINE retry due -- starting network attempt");
+        startNetworkAttemptIfIdle();
+      }
+      NetworkAttemptResult *result = nullptr;
+      if (xQueueReceive(g_networkResultQueue, &result, 0) == pdTRUE) {
+        applyNetworkAttemptResult(*result);
+        delete result;
       }
       break;
+    }
 
     default:
       // kListening/kThinking/kSpeaking are driven synchronously inside

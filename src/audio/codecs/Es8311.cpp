@@ -100,11 +100,10 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegDac37, 0x08);     // bypass DAC equalizer
 
   setMute(false);
-  // 100% was uncomfortably loud once mic gain was also maxed out (the
-  // whole point of raising both was to fix "so quiet you can barely hear
-  // it" -- turns out that overshot). 70% is a saner default; revisit once
-  // this is driven by real TTS audio instead of a synthetic test tone.
-  setVolume(70);
+  // 100%, then 70%, was still uncomfortably loud once mic gain was also
+  // maxed out. 25% is a saner default; revisit once this is driven by real
+  // TTS audio instead of a synthetic test tone.
+  setVolume(25);
 
   Logger::info(kTag, "begin() complete");
   return true;
