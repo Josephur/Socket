@@ -100,10 +100,14 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegDac37, 0x08);     // bypass DAC equalizer
 
   setMute(false);
-  // 100%, then 70%, was still uncomfortably loud once mic gain was also
-  // maxed out. 25% is a saner default; revisit once this is driven by real
-  // TTS audio instead of a synthetic test tone.
-  setVolume(25);
+  // History: 100% -> 70% -> 25%, chasing "too loud" complaints. But mic
+  // gain and DAC volume are independent -- the mic sits right next to the
+  // speaker with gain maxed (see Es7210's kMicGainMaxReg), so it picks up
+  // the self-test tone as "TONE DETECTED" even when the speaker is far too
+  // quiet to hear from normal listening distance. 25% wasn't "quieter", it
+  // was inaudible. 50% as a middle ground; revisit once this is driven by
+  // real TTS audio instead of a synthetic test tone.
+  setVolume(50);
 
   Logger::info(kTag, "begin() complete");
   return true;
