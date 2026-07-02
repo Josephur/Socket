@@ -1,25 +1,28 @@
 #include "OfflineScreen.h"
 
-#include "../fonts/AiIcons.h"
+#include "../icons/AiEmoji.h"
 
 namespace {
 lv_obj_t *g_screen = nullptr;
 
-// TEMPORARY test row for the new AiIcons font subset -- see AiIcons.h for
-// where these come from (a real FiraCode Nerd Font Mono TTF, verified
-// codepoints, converted with lv_font_conv). Put here rather than on
-// IdleScreen because this is the screen that's actually visible without a
-// real provisioning server -- move to wherever these icons are actually
-// used (status bar, conversation screen, etc) once picked.
+// TEMPORARY test row for the AiEmoji full-color icon set -- see AiEmoji.h
+// for where these come from (Twemoji SVGs rasterized and converted to LVGL
+// image descriptors). Replaced the earlier monochrome AiIcons font test row
+// here (same spot) per explicit request -- the mono font code itself is
+// still in the repo (src/ui/fonts/AiIcons.h) for later use where a
+// single-tint icon fits better, just not shown on screen right now. Put
+// here rather than on IdleScreen because this is the screen that's
+// actually visible without a real provisioning server -- move to wherever
+// these icons are actually used (status bar, conversation screen, etc)
+// once picked.
 void addIconTestRow(lv_obj_t *parent) {
-  static const char *kIcons[] = {
-      AiIcons::kRobot,     AiIcons::kBrain,      AiIcons::kMicrochip,
-      AiIcons::kSparkle,   AiIcons::kMagicWand,  AiIcons::kComment,
-      AiIcons::kComments,  AiIcons::kMicrophone, AiIcons::kVolumeUp,
-      AiIcons::kVolumeOff, AiIcons::kWifi,       AiIcons::kBluetooth,
-      AiIcons::kCloud,     AiIcons::kDatabase,   AiIcons::kGear,
-      AiIcons::kBolt,      AiIcons::kCheck,      AiIcons::kClose,
-      AiIcons::kWarning,   AiIcons::kBatteryFull,
+  static const lv_image_dsc_t *kIcons[] = {
+      AiEmoji::kRobot,          AiEmoji::kBrain,        AiEmoji::kSparkles,
+      AiEmoji::kSpeechBalloon,  AiEmoji::kThoughtBalloon,
+      AiEmoji::kMagicWand,      AiEmoji::kMicrophone,   AiEmoji::kSpeaker,
+      AiEmoji::kSpeakerMuted,   AiEmoji::kSignal,       AiEmoji::kCloud,
+      AiEmoji::kGear,           AiEmoji::kLightning,    AiEmoji::kCheck,
+      AiEmoji::kCross,          AiEmoji::kWarning,      AiEmoji::kBattery,
   };
 
   lv_obj_t *row = lv_obj_create(parent);
@@ -31,12 +34,10 @@ void addIconTestRow(lv_obj_t *parent) {
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
                          LV_FLEX_ALIGN_CENTER);
 
-  for (const char *icon : kIcons) {
-    lv_obj_t *label = lv_label_create(row);
-    lv_label_set_text(label, icon);
-    lv_obj_set_style_text_font(label, &lv_font_ai_icons_24, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xCCCCCC), 0);
-    lv_obj_set_style_pad_all(label, 8, 0);
+  for (const lv_image_dsc_t *icon : kIcons) {
+    lv_obj_t *img = lv_image_create(row);
+    lv_image_set_src(img, icon);
+    lv_obj_set_style_pad_all(img, 8, 0);
   }
 }
 }  // namespace
