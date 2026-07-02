@@ -5,6 +5,11 @@
 namespace Logger {
 
 void begin(unsigned long baud) {
+  // Big enough for several ScreenshotService lines (~140 bytes each, see
+  // its availableForWrite() gate -- with only the default buffer/FIFO that
+  // gate could never open) and to keep bursts of log lines from blocking
+  // the caller at 115200 baud. Must be set before Serial.begin().
+  Serial.setTxBufferSize(2048);
   Serial.begin(baud);
 }
 

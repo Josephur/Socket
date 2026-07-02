@@ -43,9 +43,10 @@ void playBeeps(AudioCodec &codec, int count, uint32_t sampleRateHz = 24000,
                uint32_t beepMs = 150, uint32_t gapMs = 100,
                float freqHz = 800.0f);
 
-// The full "record and play it back" bring-up test: 3 beeps, records for
-// `recordSeconds`, 3 beeps again, then plays back exactly what was
-// recorded. Blocking -- takes roughly 1 + recordSeconds + 1 seconds total.
+// The full "record and play it back" bring-up test: one beep, records for
+// `recordSeconds`, one beep again, then plays back exactly what was
+// recorded. Blocking -- takes roughly recordSeconds + a second of beeps
+// plus the playback itself.
 // Allocates the recording buffer from PSRAM and frees it before returning.
 void runRecordPlaybackDemo(AudioCodec &codec, uint32_t sampleRateHz = 24000,
                             uint32_t recordSeconds = 3);

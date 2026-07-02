@@ -100,14 +100,13 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
   writeReg(kRegDac37, 0x08);     // bypass DAC equalizer
 
   setMute(false);
-  // History: 100% -> 70% -> 25%, chasing "too loud" complaints. But mic
-  // gain and DAC volume are independent -- the mic sits right next to the
-  // speaker with gain maxed (see Es7210's kMicGainMaxReg), so it picks up
-  // the self-test tone as "TONE DETECTED" even when the speaker is far too
-  // quiet to hear from normal listening distance. 25% wasn't "quieter", it
-  // was inaudible. 50% as a middle ground; revisit once this is driven by
-  // real TTS audio instead of a synthetic test tone.
-  setVolume(50);
+  // 75% ~= +16.5dB with setVolume()'s -30..+32dB mapping (see its comment
+  // for why the scale is dB-windowed rather than the esp-bsp formula --
+  // the old mapping made everything under ~50% inaudible, which is what
+  // the 100% -> 70% -> 25% -> 50% tuning history was actually fighting).
+  // 75% was picked by ear during bring-up. Runtime control lives in
+  // AudioTestPanel's volume slider; keep kDefaultVolumePercent in sync.
+  setVolume(75);
 
   Logger::info(kTag, "begin() complete");
   return true;
@@ -115,11 +114,28 @@ bool Es8311::begin(i2c_master_bus_handle_t bus, uint32_t sampleRateHz) {
 
 void Es8311::setVolume(uint8_t volumePercent) {
   if (volumePercent > 100) volumePercent = 100;
-  // Real formula from es8311_voice_volume_set(): reg32 = (volume*256/100)-1,
-  // or 0 at volume==0.
-  uint8_t reg = (volumePercent == 0)
-                    ? 0
-                    : static_cast<uint8_t>((volumePercent * 256 / 100) - 1);
+  // The DAC volume register spans -95.5dB..+32dB in 0.5dB steps (reg =
+  // (dB + 95.5) * 2). The esp-bsp formula ((volume*256/100)-1) spreads the
+  // percent scale across that whole span, which puts everything below
+  // ~50% under -32dB -- inaudible to a human, though the self-test mic
+  // still "hears" it. Field finding to match: "0 to 50% = absolutely no
+  // sound".
+  //
+  // Instead, map onto the humanly useful window: 0% = hard mute, then
+  // 1..100% linear-in-dB from -30dB (faint but audible on this speaker;
+  // a first pass at -45dB left everything under ~20% still inaudible) up
+  // to the register's full +32dB so 100% matches the loudest this chip
+  // can go (the historical "100%"). Note the top of the range digitally
+  // clips the test tone (which sits ~8.7dB under full-scale) -- that
+  // distortion is part of how the old max sounded, and it's accepted
+  // here in exchange for maximum loudness being reachable.
+  uint8_t reg;
+  if (volumePercent == 0) {
+    reg = 0;  // -95.5dB, effectively mute
+  } else {
+    // dB = -30 + 62*(percent/100)  ->  reg = 191 + 2*dB = 131 + 124*percent/100
+    reg = static_cast<uint8_t>(131 + (124 * volumePercent) / 100);
+  }
   writeReg(kRegDacVolume, reg);
 }
 

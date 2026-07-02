@@ -45,8 +45,10 @@
 #include "src/core/RetryBackoff.h"
 #include "src/network/ConversationClient.h"
 #include "src/network/WiFiManager.h"
+#include "src/ui/AudioTestPanel.h"
 #include "src/ui/DisplayDriver.h"
 #include "src/ui/LvglBridge.h"
+#include "src/ui/ScreenshotService.h"
 #include "src/ui/TouchDriver.h"
 #include "src/ui/screens/ConversationScreen.h"
 #include "src/ui/screens/IdleScreen.h"
@@ -231,29 +233,6 @@ void pollBootButton() {
   wasPressed = pressed;
 }
 
-// TEMPORARY, for speaker/mic bring-up testing: run the record/playback demo
-// (3 beeps, record, 3 beeps, play it back) on every fresh touch tap,
-// independent of whatever's on screen. Polls the touch controller directly
-// (separate from LVGL's own indev polling) so this works regardless of what
-// widget, if any, is under the touch point.
-//
-// The demo itself takes ~5 seconds, so it runs on its own task instead of
-// inline in loop() -- otherwise it would freeze touch/LVGL/BOOT-button
-// polling for its whole duration, same problem as the old blocking WiFi
-// calls above. g_audioDemoInFlight guards against overlapping runs (a tap
-// mid-demo is just ignored) since AudioCodec isn't meant to be driven from
-// two tasks at once.
-//
-// Remove once audio bring-up is confirmed working and this is no longer
-// needed as a quick manual trigger.
-volatile bool g_audioDemoInFlight = false;
-
-void audioDemoTask(void * /*unused*/) {
-  AudioSelfTest::runRecordPlaybackDemo(g_audioCodec);
-  g_audioDemoInFlight = false;
-  vTaskDelete(nullptr);
-}
-
 // TEMPORARY debug aid: a small dot that follows the touch point on top of
 // whatever screen is showing, so a press can be visually confirmed even if
 // downstream behavior (audio, screen transitions) isn't working -- answers
@@ -276,13 +255,10 @@ void createTouchIndicator() {
   lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
 }
 
-// Single touch poll per loop() tick, shared by the audio-demo trigger and
-// the indicator dot -- previously each had its own g_touch.read() call,
-// doubling I2C traffic on the shared bus for no reason. Also logs every
-// raw press/release edge with a timestamp (temporary -- see the "taps do
-// nothing" debugging this is for) so we can tell whether the touch
-// controller itself is missing quick taps versus this loop just not
-// polling often enough to catch them.
+// Drives the touch-indicator dot and logs every raw press/release edge
+// with a timestamp (temporary debug aid). The record/playback demo used to
+// be triggered from here on any tap anywhere; it now lives behind
+// AudioTestPanel's explicit speaker button instead.
 void pollTouch() {
   static bool wasPressed = false;
   uint16_t x, y;
@@ -303,12 +279,6 @@ void pollTouch() {
     lv_obj_add_flag(g_touchIndicator, LV_OBJ_FLAG_HIDDEN);
   }
 
-  if (pressed && !wasPressed && !g_audioDemoInFlight) {
-    Logger::info(kTag, "Touch tap detected -- running record/playback demo");
-    g_audioDemoInFlight = true;
-    xTaskCreatePinnedToCore(audioDemoTask, "audio-demo", 8192, nullptr,
-                             tskIDLE_PRIORITY + 1, nullptr, /*core=*/1);
-  }
   wasPressed = pressed;
 }
 
@@ -392,6 +362,13 @@ void setup() {
                               "AudioSelfTest logs above");
   }
 
+  // After audioCodec.begin() so the panel's default volume write actually
+  // reaches the ES8311 (it would be a silent no-op before codec init).
+  Logger::info(kTag, "step: AudioTestPanel::create()");
+  AudioTestPanel::create(g_audioCodec);
+
+  ScreenshotService::begin(g_display);
+
   Logger::info(
       kTag,
       ("free DMA heap before WiFi: " +
@@ -438,6 +415,8 @@ void loop() {
   g_lvgl.tick();
   pollBootButton();
   pollTouch();
+  AudioTestPanel::tick();
+  ScreenshotService::tick();
   updateScreenPower();
 
   // Throttled heartbeat so a hung/silent board is distinguishable from one

@@ -136,8 +136,8 @@ void playBeeps(AudioCodec &codec, int count, uint32_t sampleRateHz,
 
 void runRecordPlaybackDemo(AudioCodec &codec, uint32_t sampleRateHz,
                             uint32_t recordSeconds) {
-  Logger::info(kTag, "record/playback demo: 3 beeps...");
-  playBeeps(codec, 3, sampleRateHz);
+  Logger::info(kTag, "record/playback demo: start beep...");
+  playBeeps(codec, 1, sampleRateHz);
 
   size_t totalSamples = sampleRateHz * recordSeconds;
   auto *recordBuf = static_cast<int16_t *>(
@@ -159,8 +159,8 @@ void runRecordPlaybackDemo(AudioCodec &codec, uint32_t sampleRateHz,
                                                              totalSamples)))
                           .c_str());
 
-  Logger::info(kTag, "3 beeps...");
-  playBeeps(codec, 3, sampleRateHz);
+  Logger::info(kTag, "end-of-recording beep...");
+  playBeeps(codec, 1, sampleRateHz);
 
   Logger::info(kTag, "playing back the recording...");
   size_t written = 0;

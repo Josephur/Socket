@@ -21,6 +21,15 @@ class DisplayDriver {
   // Raw Arduino_GFX handle, needed by LvglBridge's flush callback.
   Arduino_GFX *gfx() const { return gfx_; }
 
+  // Read access to the live DSI framebuffer (width*height RGB565 pixels in
+  // PSRAM) -- what the panel is scanning out right now, all layers
+  // composited. Used by ScreenshotService. Safe to cast: begin() always
+  // constructs an Arduino_DSI_Display.
+  uint16_t *framebuffer() const {
+    return gfx_ ? static_cast<Arduino_DSI_Display *>(gfx_)->getFramebuffer()
+                : nullptr;
+  }
+
  private:
   Arduino_GFX *gfx_ = nullptr;
 };

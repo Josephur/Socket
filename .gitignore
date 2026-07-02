@@ -26,3 +26,7 @@ arduino-cli/
 # instead, see libraries.txt).
 docs/Arduino/libraries/GFX_Library_for_Arduino/
 docs/Arduino/libraries/lvgl/
+
+# local screenshot script output
+/screenshot.png
+/test-screenshot.png
