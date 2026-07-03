@@ -20,12 +20,6 @@ secrets.json
 src/config/Secrets.h
 backups/
 arduino-cli/
-# Same third-party libraries we deliberately stopped vendoring in
-# lib/vendored/ -- keep them on disk locally as reference, don't duplicate
-# them in git (185MB+27MB of upstream source we install via Library Manager
-# instead, see libraries.txt).
-docs/Arduino/libraries/GFX_Library_for_Arduino/
-docs/Arduino/libraries/lvgl/
 
 # Local screenshot script output. Screenshots accumulate here with
 # timestamped names and are only ever deleted manually; kept out of git so
