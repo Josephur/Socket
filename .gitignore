@@ -20,6 +20,7 @@ secrets.json
 src/config/Secrets.h
 backups/
 arduino-cli/
+tmp/
 
 # Local screenshot script output. Screenshots accumulate here with
 # timestamped names and are only ever deleted manually; kept out of git so
